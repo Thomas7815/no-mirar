@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Billetera personal</title>
+
+<style>
+    body {
+        font-family: Arial;
+        background: #f2f2f2;
+        text-align: center;
+        padding: 20px;
+    }
+
+    .box {
+        background: white;
+        padding: 20px;
+        max-width: 650px;
+        margin: auto;
+        border-radius: 10px;
+        box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    }
+
+    input, select, button {
+        padding: 10px;
+        margin: 5px;
+        width: 80%;
+        border-radius: 5px;
+    }
+
+    button {
+        cursor: pointer;
+    }
+
+    ul {
+        text-align: left;
+        padding: 0;
+    }
+
+    li {
+        list-style: none;
+        background: #eee;
+        margin: 5px 0;
+        padding: 10px;
+        border-radius: 5px;
+    }
+
+    .meta {
+        font-weight: bold;
+        color: green;
+    }
+
+    /* 🔥 PANEL OCULTO */
+    .panel {
+        display: none;
+        background: #f9f9f9;
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 10px;
+        border: 1px solid #ddd;
+    }
+
+    .panel.show {
+        display: block;
+    }
+</style>
+</head>
+
+<body>
+
+<div class="box">
+    <h2>💳 Mi billetera personal</h2>
+
+    <!-- ⚙️ BOTÓN CONFIG -->
+    <button onclick="togglePanel()">⚙️ Configuración</button>
+
+    <!-- 🔥 PANEL CONFIG -->
+    <div class="panel" id="panel">
+
+        <h3>💱 Configuración del dólar</h3>
+
+        <p>Dólar actual: <b>$<span id="dolar">1499.25</span></b> ARS</p>
+
+        <input type="number" id="nuevoDolar" placeholder="Nuevo valor del dólar">
+
+        <button onclick="cambiarDolar()">✏️ Cambiar manual</button>
+        <button onclick="obtenerDolar()">🌐 Actualizar automático</button>
+        <button onclick="togglePanel()">❌ Cerrar</button>
+
+    </div>
+
+    <hr>
+
+    <!-- 💰 APP -->
+    <input type="number" id="peso" placeholder="Monto en pesos (ARS)">
+    <input type="number" id="usd" placeholder="Monto en dólares (USD)">
+    <button onclick="agregarUSD()">Agregar dólares</button>
+
+    <input type="text" id="detalle" placeholder="Detalle (ej: comida, regalo)">
+
+    <select id="tipo">
+        <option value="gasto">➖ Gasto</option>
+        <option value="ingreso">➕ Ingreso</option>
+    </select>
+
+    <button onclick="agregar()">Agregar movimiento</button>
+
+    <h3>Total en USD: $<span id="totalUSD">0</span></h3>
+
+    <button onclick="reiniciar()">🔄 Reiniciar</button>
+
+    <ul id="lista"></ul>
+</div>
+
+<script>
+
+let cambio = 1499.25;
+let movimientos = JSON.parse(localStorage.getItem("movimientos")) || [];
+
+// 🔥 abrir/cerrar panel
+function togglePanel() {
+    document.getElementById("panel").classList.toggle("show");
+}
+
+// 🌐 dólar automático
+async function obtenerDolar() {
+    try {
+        const res = await fetch("https://open.er-api.com/v6/latest/USD");
+        const data = await res.json();
+
+        cambio = data.rates.ARS;
+        document.getElementById("dolar").innerText = cambio.toFixed(2);
+
+        render();
+    } catch {
+        alert("No se pudo actualizar el dólar");
+    }
+}
+
+// ✏️ cambiar dólar manual
+function cambiarDolar() {
+    let nuevo = parseFloat(document.getElementById("nuevoDolar").value);
+
+    if (!nuevo || nuevo <= 0) return;
+
+    cambio = nuevo;
+
+    document.getElementById("dolar").innerText = cambio.toFixed(2);
+
+    document.getElementById("nuevoDolar").value = "";
+
+    render();
+}
+
+// 📊 render
+function render() {
+    let lista = document.getElementById("lista");
+    let total = 0;
+    lista.innerHTML = "";
+
+    movimientos.forEach((m) => {
+
+        let signo = (m.tipo === "ingreso" || m.tipo === "ingreso_usd") ? 1 : -1;
+        total += m.usd * signo;
+
+        let li = document.createElement("li");
+
+        li.innerHTML = `
+            <b>${m.tipo.includes("ingreso") ? "➕ Ingreso" : "➖ Gasto"}</b><br>
+            ${m.detalle ? "📝 " + m.detalle + "<br>" : ""}
+            ${m.pesos ? `ARS $${m.pesos} → USD $${m.usd.toFixed(2)}` : `USD $${m.usd.toFixed(2)}`}
+        `;
+
+        lista.appendChild(li);
+    });
+
+    document.getElementById("totalUSD").innerText = total.toFixed(2);
+
+    localStorage.setItem("movimientos", JSON.stringify(movimientos));
+
+    if (total >= 50) {
+        setTimeout(() => {
+            alert("🎉 ¡Llegaste a la meta de 50 USD!");
+            reiniciar();
+        }, 300);
+    }
+}
+
+// 💵 ARS
+function agregar() {
+    let pesos = parseFloat(document.getElementById("peso").value);
+    let detalle = document.getElementById("detalle").value;
+    let tipo = document.getElementById("tipo").value;
+
+    if (!pesos || pesos <= 0) return;
+
+    let usd = pesos / cambio;
+
+    movimientos.push({ pesos, usd, detalle, tipo });
+
+    document.getElementById("peso").value = "";
+    document.getElementById("detalle").value = "";
+
+    render();
+}
+
+// 💲 USD
+function agregarUSD() {
+    let usd = parseFloat(document.getElementById("usd").value);
+
+    if (!usd || usd <= 0) return;
+
+    movimientos.push({
+        pesos: 0,
+        usd: usd,
+        detalle: "Ingreso en dólares",
+        tipo: "ingreso_usd"
+    });
+
+    document.getElementById("usd").value = "";
+
+    render();
+}
+
+// 🔄 reset
+function reiniciar() {
+    movimientos = [];
+    localStorage.removeItem("movimientos");
+    render();
+}
+
+render();
+
+</script>
+
+</body>
+</html>
